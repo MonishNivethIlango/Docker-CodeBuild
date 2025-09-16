@@ -46,6 +46,7 @@ phases:
 artifacts:
   files:
     - image_definitions.json
+<<<<<<< HEAD
     version: 0.2
 
     phases:
@@ -111,3 +112,13 @@ artifacts:
         files:
           - test-results/pytest-report.xml
         file-format: JUNITXML
+=======
+    - test-results/*
+    - test-results/coverage-html/**
+  discard-paths: no
+reports:
+  pytest-reports:
+    files:
+      - test-results/pytest-report.xml
+    file-format: JUNITXML
+>>>>>>> a8597556cceb9be77014be8ae84e1756ee515c2f
