@@ -33,7 +33,9 @@ phases:
                --self-contained-html \
                --cov=app --cov-report=xml:test-results/coverage.xml \
                --cov-report=html:test-results/coverage-html \
-               --cov-fail-under=90 || exit 1
+               --cov-fail-under=90
+        TEST_EXIT_CODE=$?
+        echo $TEST_EXIT_CODE > test-results/pytest-exit-code.txt
 
   build:
     commands:
@@ -44,7 +46,7 @@ phases:
     commands:
       - echo Pushing Docker image to Docker Hub...
       - docker push "$IMAGE_REPO_NAME:$IMAGE_TAG"
-      - echo Writing image definitions file...
+  - echo Writing image definitions file...
       - printf '{"ImageURI":"%s"}' "$IMAGE_REPO_NAME:$IMAGE_TAG" > image_definitions.json
       - |
         if [ -z "${S3_BUCKET}" ]; then echo "S3_BUCKET is not set. Please set it in the CodeBuild project environment."; exit 1; fi
@@ -54,6 +56,14 @@ phases:
       - aws s3 cp "test-results/coverage.xml" "s3://${S3_BUCKET}/${CODEBUILD_SOURCE_VERSION}/${CODEBUILD_BUILD_ID}/pytest/coverage.xml" --content-type "application/xml"
       - aws s3 sync "test-results/coverage-html/" "s3://${S3_BUCKET}/${CODEBUILD_SOURCE_VERSION}/${CODEBUILD_BUILD_ID}/pytest/coverage-html/"
       - aws s3 sync "test-results/" "s3://${S3_BUCKET}/${CODEBUILD_SOURCE_VERSION}/${CODEBUILD_BUILD_ID}/pytest/" --exclude "pytest-report.html" --exclude "coverage.html" --exclude "coverage-html/*"
+      - |
+        if [ -f test-results/pytest-exit-code.txt ]; then
+          TEST_EXIT_CODE=$(cat test-results/pytest-exit-code.txt)
+          if [ "$TEST_EXIT_CODE" -ne 0 ]; then
+            echo "Tests failed or coverage below threshold. Failing build after uploading reports."
+            exit $TEST_EXIT_CODE
+          fi
+        fi
 
 artifacts:
   files:
