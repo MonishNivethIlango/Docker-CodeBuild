@@ -9,6 +9,7 @@ phases:
       - pip install --upgrade pip
       - pip install pytest pytest-cov
       - pip install pytest-html
+      - pip install pytest-html
   pre_build:
     commands:
       - echo Logging in to Docker Hub...
