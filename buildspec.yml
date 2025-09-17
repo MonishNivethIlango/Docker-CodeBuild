@@ -5,9 +5,9 @@ phases:
     runtime-versions:
       python: 3.x
     commands:
-      - pip install --upgrade pip setuptools wheel
       - pip install awscli
-      - pip install pytest pytest-cov pytest-html junitparser openpyxl
+      - pip install --upgrade pip
+      - pip install pytest pytest-cov
 
   pre_build:
     commands:
@@ -24,52 +24,14 @@ phases:
         elif [ -f .venv/Scripts/activate ]; then
           source .venv/Scripts/activate
         fi
+      - pip install --upgrade pip setuptools wheel
       - if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
       - mkdir -p test-results
-      - echo Running pytest with reports...
       - |
         pytest --junitxml=test-results/pytest-report.xml \
-               --html=test-results/pytest-report.html --self-contained-html \
                --cov=app --cov-report=xml:test-results/coverage.xml \
                --cov-report=html:test-results/coverage-html \
-               --cov-fail-under=80 || exit 1
-      - echo Generating Excel report...
-      - |
-        cat > xml_to_excel.py << 'EOF'
-        from junitparser import JUnitXml
-        import openpyxl
-
-        xml = JUnitXml.fromfile("test-results/pytest-report.xml")
-
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Test Results"
-        ws.append(["Test Case", "Status", "Message"])
-
-        for suite in xml:
-            for case in suite:
-                name = case.name
-                if case.result:
-                    status = type(case.result[0]).__name__
-                    message = case.result[0].message or ""
-                else:
-                    status = "Passed"
-                    message = ""
-                ws.append([name, status, message])
-
-        total = len(list(xml.itercases()))
-        passed = len([c for c in xml.itercases() if not c.result])
-        failed = len([c for c in xml.itercases() if c.result])
-
-        ws.append([])
-        ws.append(["Total", total])
-        ws.append(["Passed", passed])
-        ws.append(["Failed", failed])
-
-        wb.save("test-results/pytest-report.xlsx")
-        print("Excel report saved: test-results/pytest-report.xlsx")
-        EOF
-      - python xml_to_excel.py
+               --cov-fail-under=90 || exit 1
 
   build:
     commands:
@@ -82,19 +44,14 @@ phases:
       - docker push "$IMAGE_REPO_NAME:$IMAGE_TAG"
       - echo Writing image definitions file...
       - printf '{"ImageURI":"%s"}' "$IMAGE_REPO_NAME:$IMAGE_TAG" > image_definitions.json
-
       - |
-        if [ -z "${S3_BUCKET}" ]; then
-          echo "S3_BUCKET is not set. Please set it in the CodeBuild project environment."
-          exit 1
-        fi
-
-      - echo Uploading reports to S3...
+        if [ -z "${S3_BUCKET}" ]; then echo "S3_BUCKET is not set. Please set it in the CodeBuild project environment."; exit 1; fi
+      - echo Uploading test & coverage artifacts to s3://${S3_BUCKET}/${CODEBUILD_SOURCE_VERSION}/${CODEBUILD_BUILD_ID}/pytest/ ...
+      - echo "Uploading test and coverage files to s3://${S3_BUCKET}/${CODEBUILD_SOURCE_VERSION}/${CODEBUILD_BUILD_ID}/pytest/ ..."
       - aws s3 cp "test-results/pytest-report.xml" "s3://${S3_BUCKET}/${CODEBUILD_SOURCE_VERSION}/${CODEBUILD_BUILD_ID}/pytest/pytest-report.xml" --content-type "application/xml"
-      - aws s3 cp "test-results/pytest-report.html" "s3://${S3_BUCKET}/${CODEBUILD_SOURCE_VERSION}/${CODEBUILD_BUILD_ID}/pytest/pytest-report.html" --content-type "text/html"
-      - aws s3 cp "test-results/pytest-report.xlsx" "s3://${S3_BUCKET}/${CODEBUILD_SOURCE_VERSION}/${CODEBUILD_BUILD_ID}/pytest/pytest-report.xlsx" --content-type "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
       - aws s3 cp "test-results/coverage.xml" "s3://${S3_BUCKET}/${CODEBUILD_SOURCE_VERSION}/${CODEBUILD_BUILD_ID}/pytest/coverage.xml" --content-type "application/xml"
       - aws s3 sync "test-results/coverage-html/" "s3://${S3_BUCKET}/${CODEBUILD_SOURCE_VERSION}/${CODEBUILD_BUILD_ID}/pytest/coverage-html/"
+      - aws s3 sync "test-results/" "s3://${S3_BUCKET}/${CODEBUILD_SOURCE_VERSION}/${CODEBUILD_BUILD_ID}/pytest/" --exclude "pytest-report.html" --exclude "coverage.html" --exclude "coverage-html/*"
 
 artifacts:
   files:
@@ -102,7 +59,6 @@ artifacts:
     - test-results/*
     - test-results/coverage-html/**
   discard-paths: no
-
 reports:
   pytest-reports:
     files:
