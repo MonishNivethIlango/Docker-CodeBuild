@@ -31,7 +31,8 @@ phases:
         pytest --junitxml=test-results/pytest-report.xml \
                --cov=app --cov-report=xml:test-results/coverage.xml \
                --cov-report=html:test-results/coverage-html \
-               --cov-fail-under=90 || exit 1
+               --cov-fail-under=90 \
+               --html=test-results/pytest-report.html --self-contained-html --tb=short || exit 1
 
   build:
     commands:
